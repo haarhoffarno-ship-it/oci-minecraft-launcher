@@ -1,0 +1,53 @@
+name: Launch Minecraft Instance
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  launch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install OCI CLI
+        run: pip install oci-cli
+
+      - name: Setup OCI config
+        run: |
+          mkdir -p ~/.oci
+          echo "${{ secrets.OCI_PRIVATE_KEY }}" > ~/.oci/key.pem
+          chmod 600 ~/.oci/key.pem
+          cat > ~/.oci/config << EOF
+          [DEFAULT]
+          user=${{ secrets.OCI_USER_OCID }}
+          fingerprint=${{ secrets.OCI_FINGERPRINT }}
+          tenancy=${{ secrets.OCI_TENANCY_OCID }}
+          region=${{ secrets.OCI_REGION }}
+          key_file=~/.oci/key.pem
+          EOF
+
+      - name: Get Ubuntu image ID
+        id: image
+        run: |
+          IMG=$(oci compute image list --compartment-id ${{ secrets.OCI_COMPARTMENT_ID }} --operating-system "Canonical Ubuntu" --operating-system-version "24.04" --shape "VM.Standard.A1.Flex" --query 'data[0].id' --raw-output)
+          echo "id=$IMG" >> $GITHUB_OUTPUT
+
+      - name: Check if instance already exists
+        id: check
+        run: |
+          COUNT=$(oci compute instance list --compartment-id ${{ secrets.OCI_COMPARTMENT_ID }} --display-name "Minecraft-Server" --query "length(data[?\"lifecycle-state\"!='TERMINATED'])" --raw-output)
+          echo "count=$COUNT" >> $GITHUB_OUTPUT
+
+      - name: Attempt launch
+        if: steps.check.outputs.count == '0'
+        run: |
+          echo "${{ secrets.SSH_PUBLIC_KEY }}" > ssh_pub.pub
+          oci compute instance launch \
+            --availability-domain "${{ secrets.OCI_AD }}" \
+            --compartment-id "${{ secrets.OCI_COMPARTMENT_ID }}" \
+            --shape "VM.Standard.A1.Flex" \
+            --shape-config '{"ocpus": 2, "memoryInGBs": 12}' \
+            --subnet-id "${{ secrets.OCI_SUBNET_ID }}" \
+            --image-id "${{ steps.image.outputs.id }}" \
+            --display-name "Minecraft-Server" \
+            --assign-public-ip true \
+            --ssh-authorized-keys-file ssh_pub.pub
