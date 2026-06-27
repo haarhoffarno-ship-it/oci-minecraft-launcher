@@ -54,7 +54,7 @@ jobs:
               --ssh-authorized-keys-file ssh_pub.pub \
               && echo "SUCCESS at 2/12!" && exit 0
 
-            sleep 10
+            sleep 30
             echo "Full size failed, trying small (1 OCPU/6GB) as fallback..."
             oci compute instance launch \
               --availability-domain "${{ secrets.OCI_AD }}" \
