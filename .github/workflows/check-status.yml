@@ -1,0 +1,37 @@
+name: Check Minecraft Status
+on:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install OCI CLI
+        run: pip install oci-cli
+
+      - name: Setup OCI config
+        run: |
+          mkdir -p ~/.oci
+          echo "${{ secrets.OCI_PRIVATE_KEY }}" > ~/.oci/key.pem
+          chmod 600 ~/.oci/key.pem
+          cat > ~/.oci/config << EOF
+          [DEFAULT]
+          user=${{ secrets.OCI_USER_OCID }}
+          fingerprint=${{ secrets.OCI_FINGERPRINT }}
+          tenancy=${{ secrets.OCI_TENANCY_OCID }}
+          region=${{ secrets.OCI_REGION }}
+          key_file=~/.oci/key.pem
+          EOF
+
+      - name: Check instance status
+        run: |
+          RESULT=$(oci compute instance list --compartment-id ${{ secrets.OCI_COMPARTMENT_ID }} --display-name "Minecraft-Server" --query 'data[0].{state:"lifecycle-state"}' --raw-output 2>/dev/null)
+          if [ -z "$RESULT" ]; then
+            echo "## ❌ NOT CREATED YET" >> $GITHUB_STEP_SUMMARY
+            echo "Still waiting on capacity. Keep checking back." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## ✅ SERVER EXISTS" >> $GITHUB_STEP_SUMMARY
+            echo "State: $RESULT" >> $GITHUB_STEP_SUMMARY
+            IP=$(oci compute instance list-vnics --instance-id $(oci compute instance list --compartment-id ${{ secrets.OCI_COMPARTMENT_ID }} --display-name "Minecraft-Server" --query 'data[0].id' --raw-output) --query 'data[0]."public-ip"' --raw-output)
+            echo "Public IP: $IP" >> $GITHUB_STEP_SUMMARY
+          fi
