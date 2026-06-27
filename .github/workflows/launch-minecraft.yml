@@ -39,14 +39,33 @@ jobs:
       - name: Attempt launch
         if: steps.check.outputs.count == '0'
         run: |
-          echo "${{ secrets.SSH_PUBLIC_KEY }}" > ssh_pub.pub
-          oci compute instance launch \
-            --availability-domain "${{ secrets.OCI_AD }}" \
-            --compartment-id "${{ secrets.OCI_COMPARTMENT_ID }}" \
-            --shape "VM.Standard.A1.Flex" \
-            --shape-config '{"ocpus": 2, "memoryInGBs": 12}' \
-            --subnet-id "${{ secrets.OCI_SUBNET_ID }}" \
-            --image-id "${{ steps.image.outputs.id }}" \
-            --display-name "Minecraft-Server" \
-            --assign-public-ip true \
-            --ssh-authorized-keys-file ssh_pub.pub
+            echo "${{ secrets.SSH_PUBLIC_KEY }}" > ssh_pub.pub
+
+            echo "Trying full size (2 OCPU/12GB)..."
+            oci compute instance launch \
+              --availability-domain "${{ secrets.OCI_AD }}" \
+              --compartment-id "${{ secrets.OCI_COMPARTMENT_ID }}" \
+              --shape "VM.Standard.A1.Flex" \
+              --shape-config '{"ocpus": 2, "memoryInGBs": 12}' \
+              --subnet-id "${{ secrets.OCI_SUBNET_ID }}" \
+              --image-id "${{ steps.image.outputs.id }}" \
+              --display-name "Minecraft-Server" \
+              --assign-public-ip true \
+              --ssh-authorized-keys-file ssh_pub.pub \
+              && echo "SUCCESS at 2/12!" && exit 0
+
+            echo "Full size failed, trying small (1 OCPU/6GB) as fallback..."
+            oci compute instance launch \
+              --availability-domain "${{ secrets.OCI_AD }}" \
+              --compartment-id "${{ secrets.OCI_COMPARTMENT_ID }}" \
+              --shape "VM.Standard.A1.Flex" \
+              --shape-config '{"ocpus": 1, "memoryInGBs": 6}' \
+              --subnet-id "${{ secrets.OCI_SUBNET_ID }}" \
+              --image-id "${{ steps.image.outputs.id }}" \
+              --display-name "Minecraft-Server" \
+              --assign-public-ip true \
+              --ssh-authorized-keys-file ssh_pub.pub \
+              && echo "SUCCESS at 1/6 (fallback)!" && exit 0
+
+            echo "Both sizes failed this cycle."
+            exit 1
